@@ -83,3 +83,45 @@ timedatectl set-timezone "Europe/Berlin"
 
 If you are not sure about your timezone you can do `timedatectl list-timezones` to get a list of them. However, for India it is `"Asia/Kolkata"`
 
+## Installing required software
+
+### Install Server: Nginx
+Nextcloud recommends Apache2, but I did burn my fingers there. So no more Apache. Nginx FTW!
+
+```
+sudo add-apt-repository ppa:ondrej/nginx
+sudo apt-get install nginx -y
+sudo apt-get update
+```
+
+### Install Database: MariaDB
+Nextcloud recommends MariaDB. I have no opinion here, this would not affect me.
+
+```
+sudo apt install mariadb-server -y
+sudo systemctl enable mariadb
+sudo apt-get update
+```
+
+### Install Controller: PHP
+Nextcloud recommends latest PHP 7 i.e. PHP 7.4
+
+```
+sudo add-apt-repository ppa:ondrej/php
+sudo apt install php-fpm php-curl php-cli php-mysql php-gd php-common php-xml php-json php-intl php-pear php-imagick php-dev php-common php-mbstring php-zip php-soap php-bz2 -y
+sudo apt-get update
+```
+
+### Install SSL Manager: Let's Encrypt
+It needs some Python support
+
+```
+sudo add-apt-repository ppa:certbot/certbot
+sudo apt-get install software-properties-common
+sudo apt-get install python3-pyasn1
+sudo apt-get install python-certbot-nginx
+sudo apt-get update
+```
+
+## Configuring the software
+Now that all installations are done, we would need to configure them to work together.
