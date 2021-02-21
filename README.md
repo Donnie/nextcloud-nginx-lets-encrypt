@@ -34,6 +34,8 @@ There is something more to US, you can get a forever free server with 512MB RAM 
 ### For Germany
 And this is a top secret, not many people know about Hetzner. Hetzner has locations in Nurenberg, Falkenstein and Helsinki. Which are very close to Berlin, for me. Also the pricing ist unschlagbar: 2.96 EUR/month for an Ubuntu server with 2GB RAM!
 
+You have to choose a server, get ssh access. Once you have a server and you have sshed into it, you can start following the steps.
+
 ## First things first
 
 ### Update
@@ -475,5 +477,51 @@ It would ask you to provide the username, password for the admin user and for th
 
 Input all the information correctly and submit.
 
-## Face Recognition and Backblaze setup
+## Face Recognition (Optional)
+Face recognition app needs more memory
+
+### Increase PHP memory usage
+We need to open the php ini settings and increase the memory limit.
+
+```
+sudo nano /etc/php/7.4/fpm/php.ini
+```
+Press Ctrl+W to find the `memory` word, and change `128M` to `3072M`
+
+Do the same again for 
+```
+sudo nano /etc/php/7.4/cli/php.ini
+```
+Here change `-1` to `3072M`
+
+### Install PHP pdlib library
+This is used by the Face recognition app to run the models
+
+```
+sudo echo "deb https://repo.delellis.com.ar focal focal" > /etc/apt/sources.list.d/20-pdlib.list
+sudo wget -qO - https://repo.delellis.com.ar/repo.gpg.key | sudo apt-key add -
+sudo apt update
+sudo apt install php7.4-pdlib
+```
+
+### Restart PHP
+```
+sudo systemctl restart php7.4-fpm
+```
+
+### Install Face Recognition
+Goto your Nextcloud Dashboard, from the top left menu click on Apps, and search for `Face Recognition`.
+
+Just install it
+
+### Assign model
+There are [five recognition models](https://github.com/matiasdelellis/facerecognition/wiki/Models) to choose from
+
+To choose one you can do. 
+```
+sudo -u www-data php occ face:setup -m 1
+```
+Note the number `1` at the end of the command is the model number.
+
+## Backblaze setup (Optional)
 To be continued...
