@@ -132,7 +132,7 @@ sudo apt-get update
 Now that all installations are done, we would need to configure them to work together.
 
 ### Securing MySQL
-MariaDB does not come with a password set, so we need to do first set up a password. this in order to set up a user and a password for NextCloud.
+MariaDB does not come with a password set, so we need to do first set up a password.
 
 ```
 sudo mysql_secure_installation
@@ -146,7 +146,7 @@ sudo mysql_secure_installation
 6. `Reload privilege tables now? [Y/n]` Y << Type Y
 
 ### Securing PHP
-PHP comes with this weird option turned on. `fix_pathinfo` basically corrects the URL of a file if you provide an incorrect address. Which is very unsecure, as someone might be trying to guess things around. It's totally unsafe and useless. 
+PHP comes with this weird option turned on. `fix_pathinfo` basically corrects the URL of a file if you provide an incorrect address. Which is very insecure, as someone might be trying to guess things around.
 
 #### You can turn `fix_pathinfo` off by doing:
 ```
@@ -247,11 +247,37 @@ sudo certbot certonly --webroot -w /var/www/cloud.you.com/files/ -d cloud.you.co
 ```
 Read the insructions they would ask for some consent, nothing technical.
 
-#### Set up Nginx to use SSL
+### Set up Nginx to use SSL
+#### Creating Diffie-Hellman prime
 Create a strong Diffie-Hellman parameter
-```openssl dhparam -out /etc/nginx/dhparam.pem 4096```
+```
+openssl dhparam -out /etc/nginx/dhparam.pem 4096
+```
 
-open `/etc/nginx/nginx.conf`
+This may take some time, it is equally fine if you create the file 
+
+```
+sudo nano /etc/nginx/dhparam.pem
+```
+and paste this in there
+```
+-----BEGIN DH PARAMETERS-----
+MIICCAKCAgEApFPvfYTqaFFctEcnBiZh9sXs6k32Jva+/MhmgWqJ4bOF6EDiY3tF
+h4a57ktzEyEbkeoULDni8MGyqtD0REA5uA8d9YMA83A+w91DqPnRtM6vGAzGIXuN
+lvMODQtpHJMbOCACLirJlwpSeKTqzGvYmXmLtP59ZBJsf6Aun0gpvTlYqN+nbnVt
+fRQsA7jTAadB+kYB7olVQar4DUQLKO1wm4Up/5pNt7ui3GLex7/+Vf1K50vfJiX3
+0mRRYO7gCC6g55nh089LxQ9wuIA8nFJouS+0+vBu02oFHNiukGr421NC5jVYRvH3
+uZiVitq4A9PzNgg2g8d8/EXSbg7C1bUuF1JQQ63CxJirhxH2+YvzrAODUcBhzDGr
+rSaTG8y4yujezgRhu05JNTwbfRs3toOLEncZ3lagKQj5cWJIBisJpFwNCAlBcVfM
+AhXJ5ldF8P4+nJoOmtoZ8I7PF5LwrDjPdk4jkYJGDiA/w8oyqhzouh1D3dQBtdZd
+2kPBfBsl7stY2sbUl4wzzMgPuaBxDc+aJl6EkjSjz8IrVP2jyzx9JSyT77KDcxZW
+5o9JrDrRuWxqnByHrP9osOe2WexgEEInnsW/JT+AG/FlPCA+ieXA5NWKqd7+Jpiy
+ZoIwzxyAmsYTTsP+aB9nl2GaFKQN+kcxSIxVXHVRMAuLAqrNPNQhpnMCAQI=
+-----END DH PARAMETERS-----
+```
+
+#### Configure Nginx
+Now open `/etc/nginx/nginx.conf`
 
 ```
 sudo nano /etc/nginx/nginx.conf
@@ -278,7 +304,9 @@ and replace the SSL section with this:
 ```
 
 open the site configuration
-```sudo nano /etc/nginx/sites-available/cloud.you.com```
+```
+sudo nano /etc/nginx/sites-available/cloud.you.com
+```
 
 and replace the entire text with this
 
@@ -426,8 +454,9 @@ sudo chown -R www-data:www-data files
 ### Setup Database for Nextcloud
 ```sudo mysql```
 
-Here we would be specifying the user name and the password for the database, this would be used by Nextcloud app to connect to the database. It's totally fine if you forget it later.
+Here we would be specifying the user name and the password for the database, this would be used by Nextcloud app to connect to the database. 
 It's also therefore important to keep the user name and password super difficult.
+It's totally fine if you forget it later, but for now store the user and password somewhere.
 
 ```
 create database nextcloud_db;
