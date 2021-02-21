@@ -8,13 +8,13 @@ So I finally decided to give it a go.
 
 I had some requirements though from the whole setup.
 
-1. I wanted it to be set up on my domain: cloud.donnie.in
+1. I wanted it to be set up on a domain like: cloud.you.com
 2. It should have full A+ SSL
 3. Should not cost me more than 3-4 EUR a month
 4. I should be able to use the server for my other small projects.
-5. I should be able to activate the Face Recognition applet which needs around 2GB of RAM
-6. Should be able to add Backblaze B2 object storage
-7. Send and Receive email
+5. Send and Receive email
+6. I should be able to activate the Face Recognition applet which needs around 2GB of RAM
+7. Should be able to add Backblaze B2 object storage 
 
 And while I was at it, installing Nextcloud manually on a personal VPS server, I noted everything down, so as to be able to share the experience/knowledge. You do not need an engineering degree, or have heard the word PHP before. You can blindly follow the steps, I would of course explain each one of them. But if you are a pro, I wish you can improve this guide in some way. Point out mistakes or redundancies if found or suggest improvements too.
 
@@ -85,6 +85,11 @@ If you are not sure about your timezone you can do `timedatectl list-timezones` 
 
 ## Installing required software
 
+### Install Unzip
+```
+sudo apt-get install unzip
+```
+
 ### Install Server: Nginx
 Nextcloud recommends Apache2, but I did burn my fingers there. So no more Apache. Nginx FTW!
 
@@ -123,5 +128,323 @@ sudo apt-get install python-certbot-nginx
 sudo apt-get update
 ```
 
-## Configuring the software
+## Configuring required software
 Now that all installations are done, we would need to configure them to work together.
+
+### Securing MySQL
+MariaDB does not come with a password set, so we need to do first set up a password. this in order to set up a user and a password for NextCloud.
+
+```
+sudo mysql_secure_installation
+```
+
+1. First it would ask you to enter root password, but simply press Enter to continue.
+2. Then it would ask `Set root password? [Y/n]`, press Y and set it up.
+3. `Remove anonymous users? [Y/n]` Y << Type Y to remove anonymous users
+4. `Disallow root login remotely? [Y/n]` Y  << Type Y to disable root login remotely
+5. `Remove test database and access to it? [Y/n]` Y << Type Y to remove test database
+6. `Reload privilege tables now? [Y/n]` Y << Type Y
+
+### Securing PHP
+PHP comes with this weird option turned on. `fix_pathinfo` basically corrects the URL of a file if you provide an incorrect address. Which is very unsecure, as someone might be trying to guess things around. It's totally unsafe and useless. 
+
+#### You can turn `fix_pathinfo` off by doing:
+```
+sudo sed -i s/\;cgi\.fix_pathinfo\s*\=\s*1/cgi.fix_pathinfo\=0/ /etc/php/7.4/fpm/php.ini
+sudo sed -i s/\;cgi\.fix_pathinfo\s*\=\s*1/cgi.fix_pathinfo\=0/ /etc/php/7.4/cli/php.ini
+```
+
+#### Restart PHP
+```
+sudo systemctl restart php7.4-fpm
+```
+
+### Add PHP process
+Assuming you would like to host the setup on https://cloud.you.com
+
+#### Keep a backup of the existing `www.conf` file
+```mv /etc/php/7.4/fpm/pool.d/www.conf{,.bak}```
+
+#### Create new process
+```sudo nano /etc/php/7.4/fpm/pool.d/cloud.you.com.conf```
+
+#### Put this in the file
+```
+[cloud.you.com]
+user = www-data
+group = www-data
+listen = /run/cloud.you.com-fpm.sock
+listen.owner = www-data
+listen.group = www-data
+pm = ondemand
+pm.process_idle_timeout = 30s
+pm.max_requests = 512
+pm.max_children = 30
+```
+
+Press Ctrl+X to save, type Y to confirm, and then press Enter, remember these steps for editing files with nano.
+
+#### Restart PHP
+```
+sudo systemctl restart php7.4-fpm
+```
+
+### Create web directory
+```
+mkdir -p /var/www/cloud.you.com/{files,log}
+```
+
+Inside `files` add `index.php` with a line of code
+```
+echo "<?php echo 'Hello World';" >> /var/www/cloud.you.com/files/index.php
+```
+
+Inside the `log` folder create blank files
+```
+touch access.log error.log
+```
+
+### Configure Nginx
+#### Create a new site
+```sudo nano /etc/nginx/sites-available/cloud.you.com```
+
+Add this to the file
+```
+server {
+	listen 80;
+	server_name cloud.you.com;
+	root /var/www/cloud.you.com/files;
+	index index.php index.html index.htm;
+
+	access_log /var/www/cloud.you.com/log/access.log;
+	error_log  /var/www/cloud.you.com/log/error.log notice;
+
+	location ~ \.php$ {
+		try_files $uri =404;
+		fastcgi_split_path_info ^(.+\.php)(/.+)$;
+		include fastcgi_params;
+		fastcgi_read_timeout 300;
+		fastcgi_intercept_errors on;
+		fastcgi_param SCRIPT_FILENAME $document_root/$fastcgi_script_name;
+		fastcgi_pass unix:/run/cloud.you.com-fpm.sock;
+	}
+}
+```
+
+#### To enable the site
+Create a shortcut of the file in `/etc/nginx/sites-enabled`
+```
+ln -s /etc/nginx/sites-available/cloud.you.com /etc/nginx/sites-enabled/
+```
+
+#### Restart nginx
+```service nginx restart```
+
+### Configure Let's Encrypt and SSL
+#### Request certificate
+```
+sudo certbot certonly --webroot -w /var/www/cloud.you.com/files/ -d cloud.you.com
+```
+Read the insructions they would ask for some consent, nothing technical.
+
+#### Set up Nginx to use SSL
+Create a strong Diffie-Hellman parameter
+```openssl dhparam -out /etc/nginx/dhparam.pem 4096```
+
+open `/etc/nginx/nginx.conf`
+
+```
+sudo nano /etc/nginx/nginx.conf
+```
+and replace the SSL section with this:
+
+```
+	ssl_dhparam /etc/nginx/dhparam.pem; 
+	ssl_protocols TLSv1.2;
+	ssl_prefer_server_ciphers on; 
+	ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA384;
+	ssl_ecdh_curve secp384r1; 
+	ssl_session_timeout  10m;
+	ssl_session_cache shared:SSL:10m;
+	ssl_session_tickets off; 
+	ssl_stapling on; 
+	ssl_stapling_verify on;
+	resolver 8.8.8.8 8.8.4.4 valid=300s;
+	resolver_timeout 5s; 
+	add_header Strict-Transport-Security "max-age=63072000; includeSubDomains";
+	add_header X-Frame-Options DENY;
+	add_header X-Content-Type-Options nosniff;
+	add_header X-XSS-Protection "1; mode=block";
+```
+
+open the site configuration
+```sudo nano /etc/nginx/sites-available/cloud.you.com```
+
+and replace the entire text with this
+
+```
+upstream php-handler {
+	#server 127.0.0.1:9000;
+	server unix:/run/cloud.you.com-fpm.sock;
+}
+
+server {
+	listen 80;
+	listen [::]:80;
+	server_name cloud.you.com;
+	# enforce https
+	return 301 https://$server_name$request_uri;
+}
+
+server {
+	listen 443 ssl http2;
+	listen [::]:443 ssl http2;
+	server_name cloud.you.com;
+	root /var/www/cloud.you.com/files;
+	index index.php index.html index.htm;
+
+	access_log /var/www/cloud.you.com/log/access.log;
+	error_log  /var/www/cloud.you.com/log/error.log notice;
+
+	ssl_certificate /etc/letsencrypt/live/cloud.you.com/fullchain.pem;
+	ssl_certificate_key /etc/letsencrypt/live/cloud.you.com/privkey.pem;
+
+
+	location = /.well-known/carddav {
+	  return 301 $scheme://$host/remote.php/dav;
+	}
+
+	location = /.well-known/caldav {
+	  return 301 $scheme://$host/remote.php/dav;
+	}
+
+	# set max upload size
+	client_max_body_size 512M;
+	fastcgi_buffers 64 4K;
+
+	# Enable gzip but do not remove ETag headers
+	gzip on;
+	gzip_vary on;
+	gzip_comp_level 4;
+	gzip_min_length 256;
+	gzip_proxied expired no-cache no-store private no_last_modified no_etag auth;
+	gzip_types application/atom+xml application/javascript application/json application/ld+json application/manifest+json application/rss+xml application/vnd.geo+json application/vnd.ms-fontobject application/x-font-ttf application/x-web-app-manifest+json application/xhtml+xml application/xml font/opentype image/bmp image/svg+xml image/x-icon text/cache-manifest text/css text/plain text/vcard text/vnd.rim.location.xloc text/vtt text/x-component text/x-cross-domain-policy;
+
+	location / {
+		rewrite ^ /index.php$uri;
+	}
+
+	location ~ ^/(?:build|tests|config|lib|3rdparty|templates|data)/ {
+		deny all;
+	}
+	location ~ ^/(?:\.|autotest|occ|issue|indie|db_|console) {
+		deny all;
+	}
+
+	location ~ ^/(?:index|remote|public|cron|core/ajax/update|status|ocs/v[12]|updater/.+|ocs-provider/.+)\.php(?:$|/) {
+		fastcgi_split_path_info ^(.+\.php)(/.*)$;
+		include fastcgi_params;
+		fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+		fastcgi_param PATH_INFO $fastcgi_path_info;
+		fastcgi_param HTTPS on;
+		#Avoid sending the security headers twice
+		fastcgi_param modHeadersAvailable true;
+		fastcgi_param front_controller_active true;
+		fastcgi_pass php-handler;
+		fastcgi_intercept_errors on;
+		fastcgi_request_buffering off;
+	}
+
+	location ~ ^/(?:updater|ocs-provider)(?:$|/) {
+		try_files $uri/ =404;
+		index index.php;
+	}
+
+	# Adding the cache control header for js and css files
+	# Make sure it is BELOW the PHP block
+	location ~ \.(?:css|js|woff|svg|gif)$ {
+		try_files $uri /index.php$uri$is_args$args;
+		add_header Cache-Control "public, max-age=15778463";
+		# Add headers to serve security related headers (It is intended to
+		# have those duplicated to the ones above)
+		# Before enabling Strict-Transport-Security headers please read into
+		# this topic first.
+		# add_header Strict-Transport-Security "max-age=15768000; includeSubDomains; preload;";
+		#
+		# WARNING: Only add the preload option once you read about
+		# the consequences in https://hstspreload.org/. This option
+		# will add the domain to a hardcoded list that is shipped
+		# in all major browsers and getting removed from this list
+		# could take several months.
+		add_header X-Content-Type-Options nosniff;
+		add_header X-XSS-Protection "1; mode=block";
+		add_header X-Robots-Tag none;
+		add_header X-Download-Options noopen;
+		add_header X-Permitted-Cross-Domain-Policies none;
+		# Optional: Don't log access to assets
+		access_log off;
+	}
+
+	location ~ \.(?:png|html|ttf|ico|jpg|jpeg)$ {
+		try_files $uri /index.php$uri$is_args$args;
+		# Optional: Don't log access to other assets
+		access_log off;
+	}
+}
+```
+
+#### Restart nginx
+```service nginx restart```
+
+### Download Nextcloud
+#### Goto the web directory
+```
+cd /var/www/cloud.you.com
+```
+
+#### Download Nextcloud and unzip
+```
+wget https://download.nextcloud.com/server/releases/nextcloud-20.0.4.zip
+unzip nextcloud-20.0.4.zip
+```
+
+#### Move Nextcloud to files
+```mv nextcloud files```
+
+#### Create another directory for documents
+```mkdir data```
+
+#### Make them writable by PHP
+```
+sudo chown -R www-data:www-data data
+```
+
+```
+sudo chown -R www-data:www-data files
+```
+
+### Setup Database for Nextcloud
+```sudo mysql```
+
+Here we would be specifying the user name and the password for the database, this would be used by Nextcloud app to connect to the database. It's totally fine if you forget it later.
+It's also therefore important to keep the user name and password super difficult.
+
+```
+create database nextcloud_db;
+create user clouduser@localhost identified by 'cloudpass';
+grant all privileges on nextcloud_db.* to clouduser@localhost identified by 'cloudpass';
+flush privileges;
+exit;
+```
+
+## Configuring Nextcloud
+Aaand we are done!
+
+Visit: `https://cloud.you.com` now
+
+It would ask you to provide the username, password for the admin user and for the database.
+
+Input all the information correctly and submit.
+
+## Face Recognition and Backblaze setup
+To be continued...
