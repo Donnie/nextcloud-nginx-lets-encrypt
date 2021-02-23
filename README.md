@@ -207,6 +207,12 @@ touch access.log error.log
 ```
 
 ### Configure Nginx
+Before you can start configuring Nginx, make sure your domain points to your IP Address.
+
+You would need to set up an `A` record `cloud` to point to your IP Address (that you received from your server provider) with your domain provider.
+
+In this case it is assumed `cloud.you.com` points to the server.
+
 #### Create a new site
 ```sudo nano /etc/nginx/sites-available/cloud.you.com```
 
@@ -510,18 +516,35 @@ sudo systemctl restart php7.4-fpm
 ```
 
 ### Install Face Recognition
-Goto your Nextcloud Dashboard, from the top left menu click on Apps, and search for `Face Recognition`.
+Goto your Nextcloud Dashboard, from the top left use the search input to find `Face Recognition`.
 
 Just install it
 
 ### Assign model
 There are [five recognition models](https://github.com/matiasdelellis/facerecognition/wiki/Models) to choose from
 
-To choose one you can do. 
+To choose one, go back to the terminal and do
 ```
 sudo -u www-data php occ face:setup -m 1
 ```
 Note the number `1` at the end of the command is the model number.
+
+### Setup cron job
+We need a cron job to make sure Nextcloud keeps working in the background. Visit `settings/admin` from your Nextcloud and change the Background tasks to Cron.
+
+On the terminal open `crontab` for `www-data`
+
+```
+crontab -u www-data -e
+```
+
+Add this line to the end of the file:
+```
+/5  *  *  *  * php -f /var/www/cloud.you.com/files/cron.php
+```
+Save and Close crontab.
+
+That's it. Image recognition is a slow process, so you would have to wait with uncertainty till all your images get processed.
 
 ## Backblaze setup (Optional)
 To be continued...
